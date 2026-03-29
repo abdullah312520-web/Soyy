@@ -2,19 +2,26 @@ import streamlit as st
 import time
 import os
 import requests
+import pandas as pd
+from streamlit_gsheets import GSheetsConnection
 
-# --- 1. วางฟังก์ชันดึง IP ไว้ตรงนี้ (ก่อนเริ่ม CSS) ---
+# --- 1. ตั้งค่าหน้าเว็บ ---
+st.set_page_config(page_title="ส่องเพื่อออ", layout="centered")
+
+
+# --- 2. ฟังก์ชันดึง IP และ พิกัด ---
 def get_user_ip():
     headers = st.context.headers
     if "X-Forwarded-For" in headers:
-        # ดึง IP จริงของคนเข้าเว็บ (ไม่ใช่ IP เซิร์ฟเวอร์อเมริกา)
         return headers["X-Forwarded-For"].split(",")[0].strip()
     return "Unknown"
 
+
 def get_location_info(ip):
-    if ip == "Unknown" or ip.startswith("10."):
-        return "พิกัดลับ"
+    if ip == "Unknown" or ip.startswith("10.") or ip.startswith("192."):
+        return "พิกัดลับ (Local/VPN)"
     try:
+        # แก้ไข URL ให้ถูกต้องตามรูปแบบของ ip-api
         url = f"http://ip-api.com{ip}?fields=status,country,regionName,city"
         response = requests.get(url, timeout=5).json()
         if response.get('status') == 'success':
@@ -23,11 +30,12 @@ def get_location_info(ip):
         pass
     return "ไม่ทราบพิกัด"
 
-# --- ต่อด้วย CSS และโค้ดส่วนที่เหลือของคุณ ---
 
+# --- 3. เชื่อมต่อ Google Sheets ---
+# ระบบจะดึง URL จาก Secrets อัตโนมัติ
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-
-# --- CSS ตกแต่งหน้าจอ ---
+# --- 4. CSS ตกแต่งหน้าจอ (Hacker Theme) ---
 st.markdown("""
     <style>
     .stApp { background-color: #000000; overflow: hidden; }
@@ -94,14 +102,14 @@ st.markdown("""
     <div class="shaking-blue">ส่องเพื่อออ</div>
     """, unsafe_allow_html=True)
 
-# --- ส่วนรูปภาพ (แก้ไขเป็น GIF) ---
-gif_path = "robot.gif"  # <-- เปลี่ยนชื่อไฟล์ให้ตรงกับไฟล์ GIF ของคุณ
+# --- 5. ส่วนรูปภาพ ---
+gif_path = "robot.gif"
 if os.path.exists(gif_path):
     st.image(gif_path, width=450)
 else:
-    st.error("ไม่พบไฟล์ GIF! (ตรวจสอบชื่อไฟล์ robot.gif)")
+    st.info("ระบบกำลังทำงาน... (ไม่พบไฟล์ robot.gif)")
 
-# --- ระบบส่งข้อความ ---
+# --- 6. ระบบรับส่งข้อมูล ---
 if 'last_time' not in st.session_state:
     st.session_state.last_time = 0
 
@@ -111,22 +119,43 @@ msg = st.text_area("ส่งข้อความลับมา:", placeholder
 
 if st.button("SEND MESSAGE"):
     now = time.time()
-    user_ip = get_user_ip()  # เรียกใช้ฟังก์ชันที่แก้ใหม่ด้านบน
-    user_loc = get_location_info(user_ip) # เอา IP ไปเช็คพิกัด
+    user_ip = get_user_ip()
+    user_loc = get_location_info(user_ip)
 
     if now - st.session_state.last_time < 5:
         st.error(f"รอก่อน! อีก {int(5 - (now - st.session_state.last_time))} วิ")
     elif name and msg:
         st.session_state.last_time = now
-        # บันทึกข้อมูล: เวลา | IP | พิกัด | ชื่อ | ข้อความ
-        log_entry = f"📍 [{time.strftime('%H:%M:%S')}] IP: {user_ip} ({user_loc}) | NAME: {name} | MSG: {msg}"
-        
-        print(log_entry, flush=True) # พ่นออกหน้า Logs ดำๆ ทันที
-        
-        with open("messages.txt", "a", encoding="utf-8") as f:
-            f.write(log_entry + "\n")
-            
-        st.toast(f"ตรวจพบพิกัดจาก {user_loc}!", icon='🛰️')
-        st.success(f"ส่งเรียบร้อย! (เรารู้นะว่าคุณอยู่ที่ {user_loc})")
+
+        try:
+            # ดึงข้อมูลเดิมจาก Google Sheets
+            existing_df = conn.read()
+
+            # เตรียมข้อมูลใหม่
+            new_entry = pd.DataFrame([{
+                "เวลา": time.strftime('%Y-%m-%d %H:%M:%S'),
+                "IP": user_ip,
+                "พิกัด": user_loc,
+                "ชื่อ": name,
+                "ข้อความ": msg
+            }])
+
+            # รวมและอัปเดตกลับไปที่ Sheet
+            updated_df = pd.concat([existing_df, new_entry], ignore_index=True)
+            conn.update(data=updated_df)
+
+            # สำรองลงไฟล์ txt (ถ้ามีสิทธิ์เขียนไฟล์)
+            try:
+                with open("messages.txt", "a", encoding="utf-8") as f:
+                    f.write(f"[{time.strftime('%H:%M:%S')}] {user_ip} ({user_loc}) | {name}: {msg}\n")
+            except:
+                pass
+
+            st.toast(f"บันทึกพิกัด {user_loc} เรียบร้อย!", icon='🛰️')
+            st.success(f"ส่งเรียบร้อย! (เรารู้นะว่าคุณแอบดูอยู่ที่ {user_loc})")
+            st.balloons()
+
+        except Exception as e:
+            st.error(f"เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล: {e}")
     else:
         st.warning("กรอกให้ครบก่อน!")
