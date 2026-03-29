@@ -99,20 +99,22 @@ if st.button("SEND MESSAGE"):
     user_ip = get_user_ip() 
 
     if now - st.session_state.last_time < 5:
-        st.error(f"รอก่อน! อีก {int(5 - (now - st.session_state.last_time))} วิ")
+        st.error(f"ใจเย็น! อีก {int(5 - (now - st.session_state.last_time))} วิ")
     elif name and msg:
         st.session_state.last_time = now
         
-        # สร้างข้อความที่จะบันทึก
-        log_entry = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] IP: {user_ip} | NAME: {name} | MSG: {msg}"
+        # มัดรวมข้อมูลส่งสด
+        log_entry = f"🔥 LIVE_DATA: [{time.strftime('%H:%M:%S')}] | IP: {user_ip} | NAME: {name} | MSG: {msg}"
         
-        # 1. บันทึกลงไฟล์ (เหมือนเดิม)
+        # 1. พ่นออกหน้า Logs ดำๆ ทันที (นี่คือการส่งสด)
+        print(log_entry, flush=True) 
+        
+        # 2. บันทึกลงไฟล์เผื่อไว้
         with open("messages.txt", "a", encoding="utf-8") as f:
             f.write(log_entry + "\n")
             
-        # 2. พ่นออกมาในหน้า LOGS (เพิ่มบรรทัดนี้!)
-        print(f"📌 NEW SPY MESSAGE: {log_entry}") 
-        
+        # 3. แจ้งเตือนบนหน้าจอเว็บ
+        st.toast(f"ส่งข้อมูลสดสำเร็จ! ถึงสายสืบแล้ว", icon='🚀')
         st.success("ส่งเรียบร้อย! (เรารู้นะว่าคุณเป็นใคร...)")
     else:
-        st.warning("กรอกให้ครบก่อน!")
+        st.warning("กรอกชื่อกับข้อความก่อน!")
