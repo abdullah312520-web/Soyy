@@ -1,25 +1,26 @@
 import streamlit as st
 import time
 import os
+import requests  # เพิ่มตัวนี้เพื่อดึงพิกัด
+
 
 # --- ตั้งค่าหน้าเว็บ ---
-st.set_page_config(page_title="ส่องเพื่อออ", layout="centered")
+def get_location_info(ip):
+    try:
+        # ดึงข้อมูล จังหวัด และ ประเทศ จาก IP
+        url = f"http://ip-api.com{ip}?fields=status,country,regionName,city"
+        response = requests.get(url).json()
+        if response['status'] == 'success':
+            return f"{response['city']}, {response['regionName']}, {response['country']}"
+    except:
+        pass
+    return "ไม่ทราบพิกัด"
 
-# --- ฟังก์ชันดึง IP Address ---
 def get_user_ip():
-    # ดึงค่าจาก Headers ทั้งหมดที่ Streamlit Cloud ส่งมา
     headers = st.context.headers
-    
-    # 1. เช็คช่องทางมาตรฐาน (ส่วนใหญ่จะได้ IP จริง)
     if "X-Forwarded-For" in headers:
-        # เอาตัวแรกสุดในรายการ (เพราะบางทีมันมาเป็นชุด)
         return headers["X-Forwarded-For"].split(",")[0].strip()
-    
-    # 2. เช็คช่องทางสำรอง (Real IP)
-    if "X-Real-Ip" in headers:
-        return headers["X-Real-Ip"]
-    
-    return "Unknown/Local"
+    return "127.0.0.1"
 
 
 # --- CSS ตกแต่งหน้าจอ ---
@@ -107,24 +108,22 @@ msg = st.text_area("ส่งข้อความลับมา:", placeholder
 if st.button("SEND MESSAGE"):
     now = time.time()
     user_ip = get_user_ip() 
+    user_loc = get_location_info(user_ip) # <-- ดึงจังหวัด/ประเทศ
 
     if now - st.session_state.last_time < 5:
-        st.error(f"ใจเย็น! อีก {int(5 - (now - st.session_state.last_time))} วิ")
+        st.error(f"รอก่อน! อีก {int(5 - (now - st.session_state.last_time))} วิ")
     elif name and msg:
         st.session_state.last_time = now
         
-        # มัดรวมข้อมูลส่งสด
-        log_entry = f"🔥 LIVE_DATA: [{time.strftime('%H:%M:%S')}] | IP: {user_ip} | NAME: {name} | MSG: {msg}"
+        # มัดรวมข้อมูลดิบ (วันเวลา | IP | พิกัด | ชื่อ | ข้อความ)
+        log_entry = f"📍 [{time.strftime('%H:%M:%S')}] IP: {user_ip} ({user_loc}) | NAME: {name} | MSG: {msg}"
         
-        # 1. พ่นออกหน้า Logs ดำๆ ทันที (นี่คือการส่งสด)
-        print(log_entry, flush=True) 
+        print(log_entry, flush=True) # พ่นออกหน้า Logs ดำๆ ทันที
         
-        # 2. บันทึกลงไฟล์เผื่อไว้
         with open("messages.txt", "a", encoding="utf-8") as f:
             f.write(log_entry + "\n")
             
-        # 3. แจ้งเตือนบนหน้าจอเว็บ
-        st.toast(f"ส่งข้อมูลสดสำเร็จ! ถึงสายสืบแล้ว", icon='🚀')
-        st.success("ส่งเรียบร้อย! (เรารู้นะว่าคุณเป็นใคร...)")
+        st.toast(f"ตรวจพบพิกัดจาก {user_loc}!", icon='🛰️')
+        st.success("ส่งเรียบร้อย! (เรารู้นะว่าคุณอยู่ที่ไหน...)")
     else:
-        st.warning("กรอกชื่อกับข้อความก่อน!")
+        st.warning("กรอกให้ครบก่อน!")
