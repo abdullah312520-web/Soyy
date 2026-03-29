@@ -7,10 +7,20 @@ st.set_page_config(page_title="ส่องเพื่อออ", layout="cente
 
 # --- ฟังก์ชันดึง IP Address ---
 def get_user_ip():
+    # ดึงค่าจาก Headers ทั้งหมดที่ Streamlit Cloud ส่งมา
     headers = st.context.headers
+    
+    # 1. เช็คช่องทางมาตรฐาน (ส่วนใหญ่จะได้ IP จริง)
     if "X-Forwarded-For" in headers:
-        return headers["X-Forwarded-For"].split(",")[0]
+        # เอาตัวแรกสุดในรายการ (เพราะบางทีมันมาเป็นชุด)
+        return headers["X-Forwarded-For"].split(",")[0].strip()
+    
+    # 2. เช็คช่องทางสำรอง (Real IP)
+    if "X-Real-Ip" in headers:
+        return headers["X-Real-Ip"]
+    
     return "Unknown/Local"
+
 
 # --- CSS ตกแต่งหน้าจอ ---
 st.markdown("""
