@@ -1,17 +1,29 @@
 import streamlit as st
 import time
 import os
-import requests  # เพิ่มตัวนี้เพื่อดึงพิกัด
+import requests
 
-
-# --- ตั้งค่าหน้าเว็บ ---
-def get_remote_ip():
-    # ดึงค่าจาก Header ที่แม่นที่สุดของ Streamlit Cloud
+# --- 1. วางฟังก์ชันดึง IP ไว้ตรงนี้ (ก่อนเริ่ม CSS) ---
+def get_user_ip():
     headers = st.context.headers
     if "X-Forwarded-For" in headers:
-        # เอา IP ตัวแรกสุด (นี่คือ IP จริงของมือถือเพื่อน)
+        # ดึง IP จริงของคนเข้าเว็บ (ไม่ใช่ IP เซิร์ฟเวอร์อเมริกา)
         return headers["X-Forwarded-For"].split(",")[0].strip()
     return "Unknown"
+
+def get_location_info(ip):
+    if ip == "Unknown" or ip.startswith("10."):
+        return "พิกัดลับ"
+    try:
+        url = f"http://ip-api.com{ip}?fields=status,country,regionName,city"
+        response = requests.get(url, timeout=5).json()
+        if response.get('status') == 'success':
+            return f"{response.get('city')}, {response.get('regionName')}, {response.get('country')}"
+    except:
+        pass
+    return "ไม่ทราบพิกัด"
+
+# --- ต่อด้วย CSS และโค้ดส่วนที่เหลือของคุณ ---
 
 
 
